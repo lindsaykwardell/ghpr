@@ -15,9 +15,15 @@ import rumps
 info = AppKit.NSBundle.mainBundle().infoDictionary()
 info["LSBackgroundOnly"] = "1"
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.json")
+# Set custom app icon for notifications (overrides default Python rocket icon)
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+app_icon_path = os.path.join(APP_DIR, "app_icon.png")
+if os.path.exists(app_icon_path):
+    app_icon = AppKit.NSImage.alloc().initWithContentsOfFile_(app_icon_path)
+    AppKit.NSApplication.sharedApplication().setApplicationIconImage_(app_icon)
+
+CONFIG_PATH = os.path.join(APP_DIR, "config.json")
+STATE_PATH = os.path.join(APP_DIR, "state.json")
 GITHUB_ICON_PATH = None
 for ext in ("pdf", "png", "icns"):
     path = os.path.join(APP_DIR, f"github.{ext}")
