@@ -2,11 +2,11 @@
 #
 # Install ghpr — GitHub PR Monitor
 #
-#   curl -fsSL https://raw.githubusercontent.com/lindsaywardell/ghpr/main/install-remote.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/lindsaykwardell/ghpr/main/install-remote.sh | bash
 #
 set -e
 
-REPO="lindsaywardell/ghpr"
+REPO="lindsaykwardell/ghpr"
 INSTALL_DIR="$HOME/.ghpr"
 BIN_DIR="/usr/local/bin"
 BIN_LINK="$BIN_DIR/ghpr"
