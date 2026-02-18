@@ -105,9 +105,8 @@ You can also run `ghpr config` to open the file in your editor, or use `ghpr con
 
 ## Menu bar interaction
 
-- **Click the menu bar icon** to see all your open PRs
+- **Click the menu bar icon** to see all your open PRs (also clears the notification dot)
 - **Click a PR** to open it in your browser
-- **"Mark All Seen"** clears the notification dot and per-PR badges
 - **"Refresh Now"** forces an immediate poll
 
 ## Troubleshooting

@@ -9,6 +9,7 @@ import time
 import webbrowser
 
 import AppKit
+import objc
 import rumps
 
 # Hide from Dock and Cmd-Tab app switcher
@@ -292,6 +293,19 @@ def build_attributed_menu_title(status, activity, author, repo, title):
     return AppKit.NSAttributedString.alloc().initWithString_attributes_(text, attrs)
 
 
+class MenuOpenDelegate(AppKit.NSObject, protocols=[objc.protocolNamed("NSMenuDelegate")]):
+    """NSMenuDelegate that clears the notification dot when the menu is opened."""
+
+    app_ref = objc.ivar()
+
+    def menuWillOpen_(self, menu):
+        if self.app_ref and self.app_ref.has_unseen:
+            self.app_ref.has_unseen = False
+            self.app_ref._new_pr_urls.clear()
+            self.app_ref._new_comment_urls.clear()
+            self.app_ref._set_icon(notify=False)
+
+
 class GitHubPRApp(rumps.App):
     def __init__(self):
         super().__init__("GitHub PRs", quit_button=None)
@@ -324,8 +338,27 @@ class GitHubPRApp(rumps.App):
             rumps.MenuItem("Quit", callback=self.quit_app),
         ]
 
+        self._menu_delegate = None
+
         self._poll_thread = threading.Thread(target=self._poll_loop, daemon=True)
         self._poll_thread.start()
+
+        # Set up menu delegate after the app's NSStatusItem is created
+        self._setup_timer = rumps.Timer(self._setup_menu_delegate, 0.5)
+        self._setup_timer.start()
+
+    def _setup_menu_delegate(self, timer):
+        """Attach NSMenuDelegate to clear notification dot when menu opens."""
+        timer.stop()
+        try:
+            status_item = self._nsapp.nsstatusitem
+            menu = status_item.menu()
+            if menu:
+                self._menu_delegate = MenuOpenDelegate.alloc().init()
+                self._menu_delegate.app_ref = self
+                menu.setDelegate_(self._menu_delegate)
+        except (AttributeError, Exception) as e:
+            print(f"Could not set menu delegate: {e}")
 
     def _set_icon(self, notify=False):
         """Set the menu bar icon, using template (white) or notification (white + red dot)."""
@@ -469,10 +502,7 @@ class GitHubPRApp(rumps.App):
         # Update icon (white normally, white + red dot when unseen)
         self._set_icon(notify=self.has_unseen)
 
-        # Show count next to icon when there are unseen items
-        if self.has_unseen and self.prs:
-            self.title = f" ({len(self.prs)})"
-        elif not ICON_NORMAL:
+        if not ICON_NORMAL:
             self.title = "\u2630"
         else:
             self.title = None
@@ -526,8 +556,6 @@ class GitHubPRApp(rumps.App):
 
         menu_items.append(None)
         attributed_items.append(None)
-        menu_items.append(rumps.MenuItem("Mark All Seen", callback=self.mark_seen))
-        attributed_items.append(None)
         menu_items.append(rumps.MenuItem("Refresh Now", callback=self.manual_refresh))
         attributed_items.append(None)
         menu_items.append(rumps.MenuItem("Quit", callback=self.quit_app))
@@ -553,12 +581,6 @@ class GitHubPRApp(rumps.App):
             webbrowser.open(url)
 
         return callback
-
-    def mark_seen(self, _):
-        self.has_unseen = False
-        self._new_pr_urls.clear()
-        self._new_comment_urls.clear()
-        self._update_menu()
 
     def manual_refresh(self, _):
         self.has_unseen = False
