@@ -43,7 +43,7 @@ A lightweight macOS menu bar app that monitors your GitHub pull requests across 
 ### One-liner (recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lindsaywardell/ghpr/main/install-remote.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lindsaykwardell/ghpr/main/install-remote.sh | bash
 ```
 
 This clones the repo to `~/.ghpr`, sets up the venv and dependencies, and links the `ghpr` command to `/usr/local/bin`. Then run `ghpr setup` to configure your repos.
@@ -51,7 +51,7 @@ This clones the repo to `~/.ghpr`, sets up the venv and dependencies, and links 
 ### Manual
 
 ```bash
-git clone https://github.com/lindsaywardell/ghpr.git GithubPRCount
+git clone https://github.com/lindsaykwardell/ghpr.git GithubPRCount
 cd GithubPRCount
 ./setup.sh
 ```
