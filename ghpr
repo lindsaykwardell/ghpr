@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+"""ghpr — CLI for the GitHub PR Monitor menu bar app."""
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+# Resolve symlinks so this works when invoked via /usr/local/bin/ghpr
+APP_DIR = os.path.dirname(os.path.realpath(__file__))
+PLIST_NAME = "com.githubprcount.plist"
+PLIST_PATH = os.path.expanduser(f"~/Library/LaunchAgents/{PLIST_NAME}")
+VENV_DIR = os.path.join(APP_DIR, "venv")
+CONFIG_PATH = os.path.join(APP_DIR, "config.json")
+STATE_PATH = os.path.join(APP_DIR, "state.json")
+
+
+def ensure_venv():
+    if not os.path.isdir(VENV_DIR):
+        print("Error: venv not found. Run `ghpr setup` first.")
+        sys.exit(1)
+
+
+# ── setup ────────────────────────────────────────────────────────────────────
+
+def cmd_setup(args):
+    """Check prerequisites, create venv, install deps, generate icon, configure repos."""
+    print("Setting up GitHub PR Menu Bar App...\n")
+
+    # Prerequisites
+    if not shutil.which("python3"):
+        sys.exit("Error: python3 is required but not found.")
+    if not shutil.which("gh"):
+        sys.exit("Error: GitHub CLI (gh) is required but not found.\nInstall it with: brew install gh")
+    if subprocess.run(["gh", "auth", "status"], capture_output=True).returncode != 0:
+        sys.exit("Error: GitHub CLI is not authenticated.\nRun: gh auth login")
+
+    # Virtual environment
+    if not os.path.isdir(VENV_DIR):
+        print("Creating virtual environment...")
+        subprocess.run(["python3", "-m", "venv", VENV_DIR], check=True)
+
+    print("Installing dependencies...")
+    pip = os.path.join(VENV_DIR, "bin", "pip")
+    subprocess.run([pip, "install", "-r", os.path.join(APP_DIR, "requirements.txt"), "--quiet"], check=True)
+    subprocess.run([pip, "install", "pyobjc-framework-Quartz", "--quiet"], check=True)
+
+    # Generate icon
+    icon_path = os.path.join(APP_DIR, "github.png")
+    if not os.path.isfile(icon_path):
+        print("Generating menu bar icon...")
+        subprocess.run(["python3", os.path.join(APP_DIR, "create_icon.py")], check=True, cwd=APP_DIR)
+
+    # Interactive config
+    if not os.path.isfile(CONFIG_PATH):
+        print()
+        print("Which repositories would you like to monitor?")
+        print("Enter repos in owner/repo format, one per line.")
+        print("Press Enter on an empty line when done.\n")
+
+        repos = []
+        while True:
+            try:
+                repo = input("  Repo (or blank to finish): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+            if not repo:
+                break
+            if "/" not in repo:
+                print("    Invalid format — use owner/repo (e.g., octocat/Hello-World)")
+                continue
+            repos.append(repo)
+
+        if not repos:
+            print("\nNo repos entered. Creating config.json with a placeholder.")
+            print("Edit config.json before running the app.")
+            repos = ["owner/repo-name"]
+
+        config = {"repos": repos, "poll_interval_seconds": 300}
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(config, f, indent=2)
+            f.write("\n")
+        print(f"\nSaved config.json with {len(repos)} repo(s).")
+
+    print("\nSetup complete!\n")
+    print("Next steps:")
+    print("  1. ghpr start     — start the app manually")
+    print("  2. ghpr install   — auto-start on login")
+    print("\nYou can edit config.json at any time — changes are picked up automatically.")
+
+
+# ── start ────────────────────────────────────────────────────────────────────
+
+def cmd_start(args):
+    """Start the menu bar app in the foreground."""
+    ensure_venv()
+
+    # Ensure Homebrew binaries (including gh) are on PATH
+    os.environ["PATH"] = f"/opt/homebrew/bin:/usr/local/bin:{os.environ.get('PATH', '')}"
+
+    python = os.path.join(VENV_DIR, "bin", "python")
+    script = os.path.join(APP_DIR, "gh_pr_menu.py")
+    os.chdir(APP_DIR)
+    os.execv(python, [python, script])
+
+
+# ── install ──────────────────────────────────────────────────────────────────
+
+def cmd_install(args):
+    """Install LaunchAgent for auto-start on login."""
+    ensure_venv()
+
+    run_sh = os.path.join(APP_DIR, "run.sh")
+
+    # Unload existing agent if present
+    result = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
+    if "com.githubprcount" in result.stdout:
+        print("Stopping existing instance...")
+        subprocess.run(["launchctl", "unload", PLIST_PATH], capture_output=True)
+
+    print("Installing LaunchAgent...")
+    plist_content = f"""\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.githubprcount</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{run_sh}</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>{APP_DIR}</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/githubprcount.stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/githubprcount.stderr.log</string>
+</dict>
+</plist>
+"""
+    os.makedirs(os.path.dirname(PLIST_PATH), exist_ok=True)
+    with open(PLIST_PATH, "w") as f:
+        f.write(plist_content)
+
+    subprocess.run(["launchctl", "load", PLIST_PATH], check=True)
+
+    print("GitHub PR Monitor installed and running!")
+    print("It will start automatically on login.\n")
+    print("To stop:      ghpr uninstall")
+    print("To view logs: tail -f /tmp/githubprcount.stderr.log")
+
+
+# ── uninstall ────────────────────────────────────────────────────────────────
+
+def cmd_uninstall(args):
+    """Remove the LaunchAgent."""
+    if os.path.isfile(PLIST_PATH):
+        print("Stopping and removing LaunchAgent...")
+        subprocess.run(["launchctl", "unload", PLIST_PATH], capture_output=True)
+        os.remove(PLIST_PATH)
+        print("GitHub PR Monitor uninstalled.")
+    else:
+        print("LaunchAgent not found — nothing to uninstall.")
+
+
+# ── status ───────────────────────────────────────────────────────────────────
+
+def cmd_status(args):
+    """Show whether the daemon is running and current config."""
+    # Check LaunchAgent
+    result = subprocess.run(["launchctl", "list"], capture_output=True, text=True)
+    is_loaded = "com.githubprcount" in result.stdout
+
+    if is_loaded:
+        # Extract PID from launchctl list output
+        for line in result.stdout.splitlines():
+            if "com.githubprcount" in line:
+                parts = line.split()
+                pid = parts[0] if parts[0] != "-" else None
+                print(f"LaunchAgent: loaded (PID: {pid})" if pid else "LaunchAgent: loaded (not currently running)")
+                break
+    else:
+        print("LaunchAgent: not installed")
+
+    # Config summary
+    if os.path.isfile(CONFIG_PATH):
+        with open(CONFIG_PATH) as f:
+            config = json.load(f)
+        repos = config.get("repos", [])
+        interval = config.get("poll_interval_seconds", "?")
+        print(f"\nConfig: {CONFIG_PATH}")
+        print(f"  Poll interval: {interval}s")
+        print(f"  Repos ({len(repos)}):")
+        for repo in repos:
+            print(f"    - {repo}")
+    else:
+        print("\nNo config.json found. Run `ghpr setup` first.")
+
+    # State summary
+    if os.path.isfile(STATE_PATH):
+        with open(STATE_PATH) as f:
+            state = json.load(f)
+        seen = len(state.get("seen_urls", []))
+        print(f"\n  Tracked PRs (seen): {seen}")
+
+
+# ── config ───────────────────────────────────────────────────────────────────
+
+def cmd_config(args):
+    """Open config.json in $EDITOR or print current config."""
+    if not os.path.isfile(CONFIG_PATH):
+        sys.exit("No config.json found. Run `ghpr setup` first.")
+
+    editor = os.environ.get("EDITOR")
+    if editor and sys.stdout.isatty():
+        os.execvp(editor, [editor, CONFIG_PATH])
+    else:
+        with open(CONFIG_PATH) as f:
+            print(f.read(), end="")
+
+
+# ── restart ──────────────────────────────────────────────────────────────────
+
+def cmd_restart(args):
+    """Unload and reload the LaunchAgent."""
+    if not os.path.isfile(PLIST_PATH):
+        sys.exit("LaunchAgent not installed. Run `ghpr install` first.")
+
+    print("Restarting GitHub PR Monitor...")
+    subprocess.run(["launchctl", "unload", PLIST_PATH], capture_output=True)
+    subprocess.run(["launchctl", "load", PLIST_PATH], check=True)
+    print("Restarted.")
+
+
+# ── main ─────────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="ghpr",
+        description="GitHub PR Monitor — menu bar app for tracking pull requests",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser("setup", help="Check prerequisites, create venv, install deps, configure repos")
+    sub.add_parser("start", help="Start the menu bar app in the foreground")
+    sub.add_parser("install", help="Install LaunchAgent for auto-start on login")
+    sub.add_parser("uninstall", help="Remove the LaunchAgent")
+    sub.add_parser("status", help="Show daemon status and current config")
+    sub.add_parser("config", help="Open config.json in $EDITOR or print it")
+    sub.add_parser("restart", help="Restart the LaunchAgent")
+
+    args = parser.parse_args()
+
+    commands = {
+        "setup": cmd_setup,
+        "start": cmd_start,
+        "install": cmd_install,
+        "uninstall": cmd_uninstall,
+        "status": cmd_status,
+        "config": cmd_config,
+        "restart": cmd_restart,
+    }
+    commands[args.command](args)
+
+
+if __name__ == "__main__":
+    main()

@@ -45,25 +45,47 @@ A lightweight macOS menu bar app that monitors your GitHub pull requests across 
 git clone <repo-url> GithubPRCount
 cd GithubPRCount
 
-# Run setup (creates venv, installs dependencies, generates icon)
+# Run setup (creates venv, installs dependencies, generates icon, configures repos)
 ./setup.sh
-
-# Edit config.json with the repos you want to monitor
-# Format: "owner/repo-name"
-vim config.json
-
-# Start the app
-./run.sh
 ```
 
-## Auto-start on login
+Setup will also offer to install the `ghpr` CLI command (symlink to `/usr/local/bin/ghpr`). You can also create it manually:
 
 ```bash
-# Install as a LaunchAgent (starts on login, restarts on crash)
-./install.sh
+ln -sf "$(pwd)/ghpr" /usr/local/bin/ghpr
+```
 
-# To stop and remove the LaunchAgent
-./uninstall.sh
+## Usage — `ghpr` CLI
+
+The `ghpr` command is the primary interface for managing the app:
+
+| Command | Description |
+|---------|-------------|
+| `ghpr setup` | Check prerequisites, create venv, install deps, configure repos |
+| `ghpr start` | Start the menu bar app in the foreground |
+| `ghpr install` | Install LaunchAgent for auto-start on login |
+| `ghpr uninstall` | Remove the LaunchAgent |
+| `ghpr status` | Show whether the daemon is running and current config |
+| `ghpr config` | Open config.json in `$EDITOR` (or print it if no editor / not a TTY) |
+| `ghpr restart` | Restart the LaunchAgent |
+
+### Quick start
+
+```bash
+ghpr setup      # one-time setup
+ghpr start      # run manually, or:
+ghpr install    # auto-start on login
+```
+
+## Usage — shell scripts (alternative)
+
+The individual shell scripts still work if you prefer them:
+
+```bash
+./setup.sh      # one-time setup
+./run.sh        # start the app
+./install.sh    # install LaunchAgent
+./uninstall.sh  # remove LaunchAgent
 ```
 
 ## Configuration
@@ -83,7 +105,9 @@ Edit `config.json` to customize which repos to watch and how often to poll:
 
 Changes to `config.json` are picked up on the next poll — no restart needed.
 
-## Usage
+You can also run `ghpr config` to open the file in your editor.
+
+## Menu bar interaction
 
 - **Click the menu bar icon** to see all your open PRs
 - **Click a PR** to open it in your browser
@@ -94,7 +118,9 @@ Changes to `config.json` are picked up on the next poll — no restart needed.
 
 **App doesn't appear in menu bar:**
 ```bash
-# Check if the process is running
+ghpr status   # check if the LaunchAgent is loaded
+
+# Or check manually:
 launchctl list | grep githubprcount
 
 # Check logs
@@ -117,6 +143,7 @@ gh pr list --repo owner/repo-name --author $(gh api user --jq '.login') --state 
 
 | File              | Purpose                                      |
 |-------------------|----------------------------------------------|
+| `ghpr`            | CLI entrypoint (symlinked to /usr/local/bin) |
 | `gh_pr_menu.py`   | Main application                             |
 | `config.json`     | Repos to monitor and poll interval           |
 | `state.json`      | Persisted state (auto-generated, gitignored) |

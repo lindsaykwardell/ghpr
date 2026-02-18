@@ -93,8 +93,27 @@ fi
 echo ""
 echo "Setup complete!"
 echo ""
+
+# Offer to install the ghpr CLI symlink
+GHPR_SCRIPT="$(pwd)/ghpr"
+SYMLINK_TARGET="/usr/local/bin/ghpr"
+if [ ! -L "$SYMLINK_TARGET" ] && [ ! -f "$SYMLINK_TARGET" ]; then
+    echo "Would you like to install the 'ghpr' CLI command? (y/N)"
+    read -rp "  > " install_cli
+    if [[ "$install_cli" =~ ^[Yy]$ ]]; then
+        if ln -sf "$GHPR_SCRIPT" "$SYMLINK_TARGET" 2>/dev/null; then
+            echo "  Installed: $SYMLINK_TARGET -> $GHPR_SCRIPT"
+        else
+            echo "  Permission denied. Trying with sudo..."
+            sudo ln -sf "$GHPR_SCRIPT" "$SYMLINK_TARGET" && \
+                echo "  Installed: $SYMLINK_TARGET -> $GHPR_SCRIPT"
+        fi
+    fi
+    echo ""
+fi
+
 echo "Next steps:"
-echo "  1. Run ./run.sh to start the app manually"
-echo "  2. Run ./install.sh to auto-start on login"
+echo "  1. Run ghpr start (or ./run.sh) to start the app manually"
+echo "  2. Run ghpr install (or ./install.sh) to auto-start on login"
 echo ""
 echo "You can edit config.json at any time — changes are picked up automatically."
