@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""GitHub PR Menu Bar App - Shows PRs you created or are tagged in."""
+"""GitHub PR Monitor - Shows PRs you created or are tagged in."""
 
 import json
 import os
@@ -54,8 +54,10 @@ def build_icon_images():
 
     # Draw the base icon as-is
     base.drawAtPoint_fromRect_operation_fraction_(
-        AppKit.NSZeroPoint, AppKit.NSZeroRect,
-        AppKit.NSCompositingOperationSourceOver, 1.0,
+        AppKit.NSZeroPoint,
+        AppKit.NSZeroRect,
+        AppKit.NSCompositingOperationSourceOver,
+        1.0,
     )
 
     # Draw red dot in top-right
@@ -98,7 +100,9 @@ def save_state(state):
 def get_github_username():
     result = subprocess.run(
         ["gh", "api", "user", "--jq", ".login"],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode != 0:
         raise RuntimeError(f"Failed to get GitHub username: {result.stderr}")
@@ -111,11 +115,23 @@ def fetch_prs_for_repo(repo, username):
 
     result = subprocess.run(
         [
-            "gh", "pr", "list",
-            "--repo", repo, "--author", username, "--state", "open",
-            "--json", fields, "--limit", "50",
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--author",
+            username,
+            "--state",
+            "open",
+            "--json",
+            fields,
+            "--limit",
+            "50",
         ],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode == 0 and result.stdout.strip():
         for pr in json.loads(result.stdout):
@@ -125,12 +141,21 @@ def fetch_prs_for_repo(repo, username):
 
     result = subprocess.run(
         [
-            "gh", "pr", "list",
-            "--repo", repo,
-            "--search", f"is:open is:pr review-requested:{username}",
-            "--json", fields, "--limit", "50",
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--search",
+            f"is:open is:pr review-requested:{username}",
+            "--json",
+            fields,
+            "--limit",
+            "50",
         ],
-        capture_output=True, text=True, timeout=30,
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode == 0 and result.stdout.strip():
         for pr in json.loads(result.stdout):
@@ -283,7 +308,7 @@ class GitHubPRApp(rumps.App):
         self._first_fetch = True
 
         # Per-PR status tracking
-        self._new_pr_urls = set()       # PRs added since last "mark seen"
+        self._new_pr_urls = set()  # PRs added since last "mark seen"
         self._new_comment_urls = set()  # PRs with new comments since last "mark seen"
 
         state = load_state()
@@ -330,7 +355,9 @@ class GitHubPRApp(rumps.App):
 
             new_pr_urls = {pr["url"] for pr in new_prs}
             new_comment_counts = {pr["url"]: get_comment_count(pr) for pr in new_prs}
-            new_review_states = {pr["url"]: pr.get("reviewDecision", "") for pr in new_prs}
+            new_review_states = {
+                pr["url"]: pr.get("reviewDecision", "") for pr in new_prs
+            }
             new_ci_states = {pr["url"]: get_ci_state(pr) for pr in new_prs}
 
             if self._first_fetch:
@@ -429,12 +456,14 @@ class GitHubPRApp(rumps.App):
             print(f"Error during fetch: {e}")
 
     def _save_state(self):
-        save_state({
-            "seen_urls": list(self._seen_urls),
-            "comment_counts": self._comment_counts,
-            "review_states": self._review_states,
-            "ci_states": self._ci_states,
-        })
+        save_state(
+            {
+                "seen_urls": list(self._seen_urls),
+                "comment_counts": self._comment_counts,
+                "review_states": self._review_states,
+                "ci_states": self._ci_states,
+            }
+        )
 
     def _update_menu(self):
         # Update icon (white normally, white + red dot when unseen)
@@ -448,8 +477,8 @@ class GitHubPRApp(rumps.App):
         else:
             self.title = None
 
-        menu_items = []       # (rumps.MenuItem | None)
-        attributed_items = [] # parallel list: NSAttributedString or None
+        menu_items = []  # (rumps.MenuItem | None)
+        attributed_items = []  # parallel list: NSAttributedString or None
 
         if not self.prs:
             menu_items.append(rumps.MenuItem("No open PRs", callback=None))
@@ -464,9 +493,13 @@ class GitHubPRApp(rumps.App):
                 for pr in authored:
                     is_new = pr["url"] in self._new_pr_urls
                     has_new_comments = pr["url"] in self._new_comment_urls
-                    cols = format_pr_columns(pr, is_new=is_new, has_new_comments=has_new_comments)
+                    cols = format_pr_columns(
+                        pr, is_new=is_new, has_new_comments=has_new_comments
+                    )
                     attr_str = build_attributed_menu_title(*cols)
-                    item = rumps.MenuItem(cols[4], callback=self._make_open_callback(pr["url"]))
+                    item = rumps.MenuItem(
+                        cols[4], callback=self._make_open_callback(pr["url"])
+                    )
                     menu_items.append(item)
                     attributed_items.append(attr_str)
 
@@ -474,14 +507,20 @@ class GitHubPRApp(rumps.App):
                 if authored:
                     menu_items.append(None)
                     attributed_items.append(None)
-                menu_items.append(rumps.MenuItem("--- Review Requested ---", callback=None))
+                menu_items.append(
+                    rumps.MenuItem("--- Review Requested ---", callback=None)
+                )
                 attributed_items.append(None)
                 for pr in review_requested:
                     is_new = pr["url"] in self._new_pr_urls
                     has_new_comments = pr["url"] in self._new_comment_urls
-                    cols = format_pr_columns(pr, is_new=is_new, has_new_comments=has_new_comments)
+                    cols = format_pr_columns(
+                        pr, is_new=is_new, has_new_comments=has_new_comments
+                    )
                     attr_str = build_attributed_menu_title(*cols)
-                    item = rumps.MenuItem(cols[4], callback=self._make_open_callback(pr["url"]))
+                    item = rumps.MenuItem(
+                        cols[4], callback=self._make_open_callback(pr["url"])
+                    )
                     menu_items.append(item)
                     attributed_items.append(attr_str)
 
@@ -512,6 +551,7 @@ class GitHubPRApp(rumps.App):
                 self.has_unseen = False
             self._update_menu()
             webbrowser.open(url)
+
         return callback
 
     def mark_seen(self, _):
